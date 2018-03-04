@@ -9,13 +9,6 @@ class StreamError extends Error {
   }
 }
 
-// TODO: only remove the handlers we installed
-function cleanupEventHandlers(streams) {
-  const lastStream = streams[streams.length - 1];
-  streams.forEach(s => s.removeAllListeners('error'));
-  lastStream.removeAllListeners('finish');
-}
-
 // Returns a promise that is accepted when the pipe operation is done.
 function streamPromise(streams) {
   // There only two events that interest us:
@@ -23,25 +16,34 @@ function streamPromise(streams) {
   // the chained pipe operations are done, and the last stream has been
   // flushed and ended.
   // * An 'error' event from any stream, when something goes wrong.
-  return Promise.race([
-    new Promise((accept, reject) => {
-      const stream = streams[streams.length - 1];
-      if (stream === process.stdout || stream === process.stderr) {
-        accept();
+  const dest = streams[streams.length - 1];
+
+  return new Promise((resolve, reject) => {
+    // insert a PassThrough stream before dest to listen for finish instead?
+    if (dest.autoClose === false || dest.fd === 1 || dest.fd === 2) {
+      resolve(streams);
+      return;
+    }
+
+    const onerror = function(err) {
+      if (this !== dest) {
+        this.unpipe();
       }
-      stream.once('finish', accept);
-    }),
-    Promise.all(streams.map(
-      stream => new Promise((accept, reject) => {
-        if (stream === process.stdout || stream === process.stderr) {
-          accept();
-        }
-        stream.once('error', err => reject(new StreamError(err, stream)));
-      })
-    ))
-  ]).then(() => {
-    cleanupEventHandlers(streams);
-    return streams;
+
+      reject(new StreamError(err, this));
+    };
+
+    for (const stream of streams) {
+      stream.once('error', onerror);
+    }
+
+    dest.once('finish', () => {
+      for (const stream of streams) {
+        stream.removeListener('error', onerror);
+      }
+
+      resolve(streams);
+    });
   });
 }
 
