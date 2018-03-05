@@ -59,6 +59,19 @@ describe("promisePipe", function() {
             var input = fs.createReadStream(INPUT);
             return promisePipe(input, process[stdio]);
         });
+
+        it("can handle errors when dest is " + stdio, function() {
+            var input = fs.createReadStream("bad");
+            var output = process[stdio];
+
+            return promisePipe(input, output)
+              .catch(err => err)
+              .then(function(err) {
+                assert(err);
+                assert.equal(err.originalError.code, "ENOENT");
+                assert.equal(err.source, input);
+              });
+        });
     });
 
     it("can handle errors from source", function() {
