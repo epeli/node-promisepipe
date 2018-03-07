@@ -11,20 +11,7 @@ class StreamError extends Error {
 
 // Returns a promise that is accepted when the pipe operation is done.
 function streamPromise(streams) {
-  // There only two events that interest us:
-  // * A 'finish' event emitted by the last stream in the chain, which means
-  // the chained pipe operations are done, and the last stream has been
-  // flushed and ended.
-  // * An 'error' event from any stream, when something goes wrong.
-  const dest = streams[streams.length - 1];
-
   return new Promise((resolve, reject) => {
-    // insert a PassThrough stream before dest to listen for finish instead?
-    if (dest.autoClose === false || dest.fd === 1 || dest.fd === 2) {
-      resolve(streams);
-      return;
-    }
-
     const onerror = function(err) {
       if (this !== dest) {
         this.unpipe();
@@ -32,18 +19,36 @@ function streamPromise(streams) {
 
       reject(new StreamError(err, this));
     };
-
-    for (const stream of streams) {
-      stream.once('error', onerror);
-    }
-
-    dest.once('finish', () => {
+    const ondone = () => {
       for (const stream of streams) {
         stream.removeListener('error', onerror);
       }
 
       resolve(streams);
-    });
+    };
+
+    for (const stream of streams) {
+      stream.on('error', onerror);
+    }
+
+    let i = streams.length - 1;
+
+    // iterate back to front to find the last stream that is not stdio
+    while (i > -1 && (streams[i] === process.stdout || streams[i] === process.stderr)) {
+      i--;
+    }
+
+    if (i < 0) {
+      // this will only happen if every stream is stdio, which users should not do anyway
+      ondone();
+      return;
+    }
+
+    const dest = streams[i];
+
+    dest.once('end', ondone);
+    dest.once('finish', ondone);
+    dest.once('close', ondone);
   });
 }
 
