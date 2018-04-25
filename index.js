@@ -43,19 +43,9 @@ function streamPromise(stream) {
   return Promise.race(events.map(on));
 }
 
-/**
- * @param {...Stream} stream
- */
-function promisePipe(stream) {
-  let i = arguments.length;
-  const streams = [];
-  while ( i-- ) streams[i] = arguments[i];
-
-  const allStreams = streams
-    .reduce((current, next) => current.concat(next), []);
-
-  allStreams.reduce((current, next) => current.pipe(next));
-  return Promise.all(allStreams.map(streamPromise));
+function promisePipe(...streams) {
+  streams.reduce((current, next) => current.pipe(next));
+  return Promise.all(streams.map(streamPromise));
 }
 
 module.exports = Object.assign(promisePipe, {
