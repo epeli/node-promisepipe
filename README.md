@@ -1,5 +1,7 @@
 # promisePipe
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/epeli/node-promisepipe.svg)](https://greenkeeper.io/)
+
 Safely pipe node.js streams while capturing all errors to a single promise.
 
 ## Install
